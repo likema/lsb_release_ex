@@ -1,4 +1,3 @@
-=====================
 lsb_release_ex
 =====================
 
@@ -8,7 +7,7 @@ Ehanced Linux Standard Base version reporting module for Debian/Ubuntu and
 Red Hat series. It is inspired by Debian implementaion in lsb-release.
 
 Installation
-===============
+---------------
 
 Download the latest version from github:
 
@@ -17,7 +16,7 @@ Download the latest version from github:
 	python setup.py install
 
 Usage
-===============
+---------------
 
 The sample runs just like
 

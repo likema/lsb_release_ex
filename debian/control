@@ -1,0 +1,15 @@
+Source: lsb-release-ex
+Priority: extra
+Maintainer: Like Ma <likemartinma@gmail.com>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.2
+Section: universe/python
+Homepage: https://github.com/likema/lsb_release_ex
+Vcs-Git: git://git@github.com:likema/lsb_release_ex.git
+Vcs-Browser: https://github.com/likema/lsb_release_ex
+
+Package: lsb-release-ex
+Architecture: all
+Description: LSB release detection module for Debian/Ubuntu and Red Hat.
+ Ehanced Linux Standard Base version reporting module for Debian/Ubuntu and
+ Red Hat series. It is inspired by Debian implementaion in lsb-release.

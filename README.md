@@ -1,13 +1,11 @@
-lsb_release_ex
-=====================
+# lsb_release_ex
 
 LSB release detection module for Debian/Ubuntu and Red Hat.
 
 Ehanced Linux Standard Base version reporting module for Debian/Ubuntu and
 Red Hat series. It is inspired by Debian implementaion in lsb-release.
 
-Installation
----------------
+## Installation
 
 Download the latest version from github:
 
@@ -15,8 +13,15 @@ Download the latest version from github:
 	cd lsb_release_ex
 	python setup.py install
 
-Usage
----------------
+## Packaging
+
+### Ubuntu/Debian
+
+	git clone git://github.com/likema/lsb_release_ex.git
+	cd lsb_release_ex
+	dpkg-buildpackage -us -uc -rfakeroot
+
+## Usage
 
 The sample runs just like
 

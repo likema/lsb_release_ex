@@ -214,8 +214,7 @@ def guess_debian_release():
 
     if os.path.exists('/etc/debian_version'):
         try:
-            with open('/etc/debian_version') as debian_version:
-                release = debian_version.read().strip()
+            release = open('/etc/debian_version').read().strip()
         except IOError, msg:
             print >>sys.stderr, 'Unable to open /etc/debian_version:', str(msg)
             release = 'unknown'
@@ -267,21 +266,20 @@ def get_lsb_information():
     distinfo = {}
     if os.path.exists("/etc/lsb-release"):
         try:
-            with open("/etc/lsb-release") as lsb_release_file:
-                for line in lsb_release_file:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    # Skip invalid lines
-                    if not '=' in line:
-                        continue
-                    var, arg = line.split('=', 1)
-                    if var.startswith('DISTRIB_'):
-                        var = var[8:]
-                        if arg.startswith('"') and arg.endswith('"'):
-                            arg = arg[1:-1]
-                        if arg:  # Ignore empty arguments
-                            distinfo[var] = arg
+            for line in open("/etc/lsb-release"):
+                line = line.strip()
+                if not line:
+                    continue
+                # Skip invalid lines
+                if not '=' in line:
+                    continue
+                var, arg = line.split('=', 1)
+                if var.startswith('DISTRIB_'):
+                    var = var[8:]
+                    if arg.startswith('"') and arg.endswith('"'):
+                        arg = arg[1:-1]
+                    if arg:  # Ignore empty arguments
+                        distinfo[var] = arg
         except IOError, msg:
             print >>sys.stderr, "Unable to open /etc/lsb-release:", str(msg)
     else:
@@ -294,21 +292,20 @@ def get_lsb_information():
 
         if release:
             try:
-                with open(release) as release_file:
-                    m = REDHAT_RELEASE_RE.match(release_file.readline())
-                    if m:
-                        distinfo["DESCRIPTION"] = m.group(0)
-                        id = m.group(1)
+                m = REDHAT_RELEASE_RE.match(open(release).readline())
+                if m:
+                    distinfo["DESCRIPTION"] = m.group(0)
+                    id = m.group(1)
 
-                        if id == "Red Hat Enterprise Linux Server":
-                            distinfo["ID"] = "RedHatEnterpriseServer"
-                        elif id == "Enterprise Linux Enterprise Linux Server":
-                            distinfo["ID"] = "EnterpriseEnterpriseServer"
-                        else:
-                            distinfo["ID"] = id
+                    if id == "Red Hat Enterprise Linux Server":
+                        distinfo["ID"] = "RedHatEnterpriseServer"
+                    elif id == "Enterprise Linux Enterprise Linux Server":
+                        distinfo["ID"] = "EnterpriseEnterpriseServer"
+                    else:
+                        distinfo["ID"] = id
 
-                        distinfo["RELEASE"] = m.group(2)
-                        distinfo["CODENAME"] = m.group(3)
+                    distinfo["RELEASE"] = m.group(2)
+                    distinfo["CODENAME"] = m.group(3)
             except IOError, msg:
                 sys.stderr.write("Unable to open /etc/redhat-release: %s" %
                                  str(msg))
@@ -340,12 +337,16 @@ def get_distro_information():
 if __name__ == '__main__':
     distinfo = get_distro_information()
     verinfo = check_modules_installed()
+    if verinfo:
+        lsb_version = ":".join(verinfo)
+    else:
+        lsb_version = ''
 
     print '''LSB Version:    %s
 Distributor ID: %s
 Description:    %s
 Release:        %s
-Codename:       %s''' % (":".join(verinfo) if verinfo else None,
+Codename:       %s''' % (lsb_version,
                          distinfo.get("ID"),
                          distinfo.get("DESCRIPTION"),
                          distinfo.get("RELEASE"),

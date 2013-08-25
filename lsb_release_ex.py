@@ -35,8 +35,11 @@ RELEASE_CODENAME_LOOKUP = {
 
 TESTING_CODENAME = 'unknown.new.testing'
 
-# e.g. CentOS release 5.9 (Final)
-REDHAT_RELEASE_RE = re.compile(r'^(\w+)\s+release\s+([\w\.]+)\s*\(([^\)]+)\)')
+# e.g.
+#  CentOS release 5.9 (Final)
+#  Red Hat Enterprise Linux Server release 5.4 (Tikanga)
+#  Enterprise Linux Enterprise Linux Server release 5.5 (Carthage)
+REDHAT_RELEASE_RE = re.compile(r'^(.*)\s+release\s+([\w\.]+)\s*\(([^\)]+)\)')
 
 
 def lookup_codename(release, unknown=None):
@@ -281,18 +284,34 @@ def get_lsb_information():
                             distinfo[var] = arg
         except IOError, msg:
             print >>sys.stderr, "Unable to open /etc/lsb-release:", str(msg)
-    elif os.path.exists("/etc/redhat-release"):
-        try:
-            # e.g. CentOS release 5.9 (Final)
-            with open("/etc/redhat-release") as lsb_release_file:
-                m = REDHAT_RELEASE_RE.match(lsb_release_file.readline())
-                if m:
-                    distinfo["DESCRIPTION"] = m.group(0)
-                    distinfo["ID"] = m.group(1)
-                    distinfo["RELEASE"] = m.group(2)
-                    distinfo["CODENAME"] = m.group(3)
-        except IOError, msg:
-            print >>sys.stderr, "Unable to open /etc/redhat-release:", str(msg)
+    else:
+        if os.path.exists("/etc/enterprise-release"):
+            release = "/etc/enterprise-release"
+        elif os.path.exists("/etc/redhat-release"):
+            release = "/etc/redhat-release"
+        else:
+            release = None
+
+        if release:
+            try:
+                with open(release) as release_file:
+                    m = REDHAT_RELEASE_RE.match(release_file.readline())
+                    if m:
+                        distinfo["DESCRIPTION"] = m.group(0)
+                        id = m.group(1)
+
+                        if id == "Red Hat Enterprise Linux Server":
+                            distinfo["ID"] = "RedHatEnterpriseServer"
+                        elif id == "Enterprise Linux Enterprise Linux Server":
+                            distinfo["ID"] = "EnterpriseEnterpriseServer"
+                        else:
+                            distinfo["ID"] = id
+
+                        distinfo["RELEASE"] = m.group(2)
+                        distinfo["CODENAME"] = m.group(3)
+            except IOError, msg:
+                sys.stderr.write("Unable to open /etc/redhat-release: %s" %
+                                 str(msg))
 
     if not distinfo:
         id, release, codename = platform.linux_distribution()

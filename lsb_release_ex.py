@@ -58,42 +58,52 @@ modnamere = re.compile(r'lsb-(?P<module>[a-z0-9]+)-'
                        r'(?P<arch>[^ ]+)(?: \(= (?P<version>[0-9.]+)\))?')
 
 
-def valid_lsb_versions(version, module):
-    # If a module is ever released that only appears in >= version, deal
-    # with that here
-    if version == '3.0':
-        return ['2.0', '3.0']
-    elif version == '3.1':
-        if module in ('desktop', 'qt4'):
-            return ['3.1']
-        else:
-            return ['2.0', '3.0', '3.1']
-    elif version == '3.2':
-        if module == 'desktop':
-            return ['3.1', '3.2']
-        elif module == 'qt4':
-            return ['3.1']
-        elif module in ('printing', 'languages', 'multimedia'):
-            return ['3.2']
-        elif module == 'cxx':
-            return ['3.0', '3.1', '3.2']
-        else:
-            return ['2.0', '3.0', '3.1', '3.2']
-    elif version == '4.0':
-        if module == 'desktop':
-            return ['3.1', '3.2', '4.0']
-        elif module == 'qt4':
-            return ['3.1']
-        elif module in ('printing', 'languages', 'multimedia'):
-            return ['3.2', '4.0']
-        elif module == 'security':
-            return ['4.0']
-        elif module == 'cxx':
-            return ['3.0', '3.1', '3.2', '4.0']
-        else:
-            return ['2.0', '3.0', '3.1', '3.2', '4.0']
+# If a module is ever released that only appears in >= version, deal
+# with that here
+LSB_VERSIONS_TABLE = {
+    '3.0': (None, ['2.0', '3.0']),
 
-    return [version]
+    '3.1': (
+        {
+            'desktop': ['3.1'],
+            'qt4': ['3.1']
+        },
+        ['2.0', '3.0', '3.1']
+    ),
+
+    '3.2': (
+        {
+            'desktop': ['3.1', '3.2'],
+            'qt4': ['3.1'],
+            'printing': ['3.2'],
+            'languages': ['3.2'],
+            'multimedia': ['3.2'],
+            'cxx': ['3.0', '3.1', '3.2'],
+        },
+        ['2.0', '3.0', '3.1', '3.2']
+    ),
+
+    '4.0': (
+        {
+            'desktop': ['3.1', '3.2', '4.0'],
+            'qt4': ['3.1'],
+            'printing': ['3.2', '4.0'],
+            'languages': ['3.2', '4.0'],
+            'multimedia': ['3.2', '4.0'],
+            'security': ['4.0'],
+            'cxx': ['3.0', '3.1', '3.2', '4.0']
+        },
+        ['2.0', '3.0', '3.1', '3.2', '4.0']
+    ),
+}
+
+
+def valid_lsb_versions(version, module):
+    if version not in LSB_VERSIONS_TABLE:
+        return [version]
+
+    table, default = LSB_VERSIONS_TABLE[version]
+    return table.get(module, default)
 
 try:
     set  # introduced in 2.4
@@ -199,6 +209,24 @@ def guess_release_from_apt(origin='Debian', component='main',
     return releases[0][1]
 
 
+def debian_version_io(fp):
+    release = fp.read().strip()
+
+    if not release[0:1].isalpha():
+        # /etc/debian_version should be numeric
+        codename = lookup_codename(release, 'n/a')
+        return {'RELEASE': release, 'CODENAME': codename}
+
+    if release.endswith('/sid'):
+        if release.rstrip('/sid').lower().isalpha() != 'testing':
+            global TESTING_CODENAME
+            TESTING_CODENAME = release.rstrip('/sid')
+
+        return {'RELEASE': 'testing/unstable'}
+
+    return {'RELEASE': release}
+
+
 def guess_debian_release():
     distinfo = {'ID': 'Debian'}
 
@@ -210,26 +238,12 @@ def guess_debian_release():
     else:
         distinfo['OS'] = 'GNU'
 
-    distinfo['DESCRIPTION'] = '%(ID)s %(OS)s' % distinfo
-
     if os.path.exists('/etc/debian_version'):
         try:
-            release = open('/etc/debian_version').read().strip()
+            distinfo.update(debian_version_io(open('/etc/debian_version')))
         except IOError, msg:
             print >>sys.stderr, 'Unable to open /etc/debian_version:', str(msg)
-            release = 'unknown'
-
-        if not release[0:1].isalpha():
-            # /etc/debian_version should be numeric
-            codename = lookup_codename(release, 'n/a')
-            distinfo.update({'RELEASE': release, 'CODENAME': codename})
-        elif release.endswith('/sid'):
-            if release.rstrip('/sid').lower().isalpha() != 'testing':
-                global TESTING_CODENAME
-                TESTING_CODENAME = release.rstrip('/sid')
-            distinfo['RELEASE'] = 'testing/unstable'
-        else:
-            distinfo['RELEASE'] = release
+            distinfo['RELEASE'] = 'unknown'
 
     # Only use apt information if we did not get the proper information
     # from /etc/debian_version or if we don't have a codename
@@ -253,35 +267,66 @@ def guess_debian_release():
                 codename = 'sid'
         distinfo.update({'RELEASE': release, 'CODENAME': codename})
 
-    if distinfo.get('RELEASE'):
-        distinfo['DESCRIPTION'] += ' %(RELEASE)s' % distinfo
-    if distinfo.get('CODENAME'):
-        distinfo['DESCRIPTION'] += ' (%(CODENAME)s)' % distinfo
+    distinfo['DESCRIPTION'] = ' '.join(
+        filter(None, (distinfo.get('ID'), distinfo.get('OS'),
+                      distinfo.get('RELEASE'), distinfo.get('CODENAME'))))
+
+    return distinfo
+
+
+def get_debian_lsb_information(fp):
+    distinfo = {}
+
+    try:
+        for line in fp:
+            line = line.strip()
+            if not line:
+                continue
+            # Skip invalid lines
+            if not '=' in line:
+                continue
+            var, arg = line.split('=', 1)
+            if var.startswith('DISTRIB_'):
+                var = var[8:]
+                if arg.startswith('"') and arg.endswith('"'):
+                    arg = arg[1:-1]
+                if arg:  # Ignore empty arguments
+                    distinfo[var] = arg
+    except IOError, msg:
+        print >>sys.stderr, "Unable to open /etc/lsb-release:", str(msg)
+
+    return distinfo
+
+
+def get_redhat_lsb_information(fp):
+    distinfo = {}
+
+    try:
+        m = REDHAT_RELEASE_RE.match(fp.readline())
+        if m:
+            distinfo["DESCRIPTION"] = m.group(0)
+            id = m.group(1)
+
+            if id == "Red Hat Enterprise Linux Server":
+                distinfo["ID"] = "RedHatEnterpriseServer"
+            elif id == "Enterprise Linux Enterprise Linux Server":
+                distinfo["ID"] = "EnterpriseEnterpriseServer"
+            else:
+                distinfo["ID"] = id
+
+            distinfo["RELEASE"] = m.group(2)
+            distinfo["CODENAME"] = m.group(3)
+    except IOError, msg:
+        sys.stderr.write("Unable to open /etc/redhat-release: %s" %
+                         str(msg))
 
     return distinfo
 
 
 # Whatever is guessed above can be overridden in /etc/lsb-release
 def get_lsb_information():
-    distinfo = {}
     if os.path.exists("/etc/lsb-release"):
-        try:
-            for line in open("/etc/lsb-release"):
-                line = line.strip()
-                if not line:
-                    continue
-                # Skip invalid lines
-                if not '=' in line:
-                    continue
-                var, arg = line.split('=', 1)
-                if var.startswith('DISTRIB_'):
-                    var = var[8:]
-                    if arg.startswith('"') and arg.endswith('"'):
-                        arg = arg[1:-1]
-                    if arg:  # Ignore empty arguments
-                        distinfo[var] = arg
-        except IOError, msg:
-            print >>sys.stderr, "Unable to open /etc/lsb-release:", str(msg)
+        distinfo = get_debian_lsb_information(open("/etc/lsb-release"))
     else:
         if os.path.exists("/etc/enterprise-release"):
             release = "/etc/enterprise-release"
@@ -290,29 +335,11 @@ def get_lsb_information():
         else:
             release = None
 
-        if release:
-            try:
-                m = REDHAT_RELEASE_RE.match(open(release).readline())
-                if m:
-                    distinfo["DESCRIPTION"] = m.group(0)
-                    id = m.group(1)
-
-                    if id == "Red Hat Enterprise Linux Server":
-                        distinfo["ID"] = "RedHatEnterpriseServer"
-                    elif id == "Enterprise Linux Enterprise Linux Server":
-                        distinfo["ID"] = "EnterpriseEnterpriseServer"
-                    else:
-                        distinfo["ID"] = id
-
-                    distinfo["RELEASE"] = m.group(2)
-                    distinfo["CODENAME"] = m.group(3)
-            except IOError, msg:
-                sys.stderr.write("Unable to open /etc/redhat-release: %s" %
-                                 str(msg))
+        distinfo = get_redhat_lsb_information(open(release)) if release else {}
 
     if not distinfo:
-        id, release, codename = platform.linux_distribution()
-        distinfo["ID"] = id
+        id_, release, codename = platform.linux_distribution()
+        distinfo["ID"] = id_
         distinfo["RELEASE"] = release
         distinfo["CODENAME"] = codename
         distinfo["DESCRIPTION"] = "%s %s %s" % (id, release, codename)
@@ -330,8 +357,6 @@ def get_distro_information():
             return distinfo
     else:
         return lsbinfo
-
-    return get_lsb_information()
 
 
 if __name__ == '__main__':
@@ -352,4 +377,4 @@ Codename:       %s''' % (lsb_version,
                          distinfo.get("RELEASE"),
                          distinfo.get("CODENAME"))
 
-# vim: ts=4 sw=4 et:
+# vim: ts=4 sw=4 sts=4 et:

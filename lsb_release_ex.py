@@ -12,10 +12,10 @@ __email__ = "likemartinma@gmail.com"
 
 
 import sys
-import commands
 import os
 import re
 import platform
+from subprocess import Popen, PIPE
 
 # XXX: Update as needed
 # This should really be included in apt-cache policy output... it is already
@@ -118,15 +118,14 @@ def check_modules_installed():
         return tuple(os.listdir('/etc/lsb-release.d'))
     except:
         # Find which LSB modules are installed on this system
-        output = commands.getoutput(
-            "dpkg-query -f '${Version} ${Provides}\n' -W %s 2>/dev/null" %
-            PACKAGES)
-        if not output:
-            return []
+        proc = Popen(['dpkg-query', '-f', r'${Version} ${Provides}\n',
+                      '-W'] + PACKAGES.split(),
+                     stdout=PIPE, stderr=open('/dev/null', 'w'),
+                     close_fds=True)
 
         modules = set()
-        for line in output.split(os.linesep):
-            version, provides = line.split(' ', 1)
+        for i in proc.stdout:
+            version, provides = i.strip().decode().split(' ', 1)
             version = version.split('-', 1)[0]
             for pkg in provides.split(','):
                 mob = modnamere.search(pkg)
@@ -147,6 +146,7 @@ def check_modules_installed():
 
         modules = list(modules)
         modules.sort()
+        proc.wait()
         return modules
 
 longnames = {'v': 'version', 'o': 'origin', 'a': 'suite',
@@ -168,17 +168,21 @@ def parse_policy_line(data):
 def parse_apt_policy():
     data = []
 
-    policy = commands.getoutput('LANG=C apt-cache policy 2>/dev/null')
-    for line in policy.split('\n'):
-        line = line.strip()
-        m = re.match(r'(\d+)', line)
+    proc = Popen(("apt-cache", "policy"),
+                 stdout=PIPE, stderr=open('/dev/null', 'w'),
+                 close_fds=True, env={"LANG": "C"})
+    for i in proc.stdout:
+        i = i.strip()
+        m = re.match(r'(\d+)', i)
         if m:
             priority = int(m.group(1))
-        if line.startswith('release'):
-            bits = line.split(' ', 1)
+
+        if i.startswith('release'):
+            bits = i.split(' ', 1)
             if len(bits) > 1:
                 data.append((priority, parse_policy_line(bits[1])))
 
+    proc.wait()
     return data
 
 
@@ -241,8 +245,8 @@ def guess_debian_release():
     if os.path.exists('/etc/debian_version'):
         try:
             distinfo.update(debian_version_io(open('/etc/debian_version')))
-        except IOError, msg:
-            print >>sys.stderr, 'Unable to open /etc/debian_version:', str(msg)
+        except IOError as msg:
+            sys.stderr.write('Unable to open /etc/debian_version: %s\n' % msg)
             distinfo['RELEASE'] = 'unknown'
 
     # Only use apt information if we did not get the proper information
@@ -292,8 +296,8 @@ def get_debian_lsb_information(fp):
                     arg = arg[1:-1]
                 if arg:  # Ignore empty arguments
                     distinfo[var] = arg
-    except IOError, msg:
-        print >>sys.stderr, "Unable to open /etc/lsb-release:", str(msg)
+    except IOError as msg:
+        sys.stderr.write('Unable to open /etc/lsb-release: %s\n' % msg)
 
     return distinfo
 
@@ -316,9 +320,8 @@ def get_redhat_lsb_information(fp):
 
             distinfo["RELEASE"] = m.group(2)
             distinfo["CODENAME"] = m.group(3)
-    except IOError, msg:
-        sys.stderr.write("Unable to open /etc/redhat-release: %s" %
-                         str(msg))
+    except IOError as msg:
+        sys.stderr.write("Unable to open /etc/redhat-release: %s\n" % msg)
 
     return distinfo
 
@@ -367,7 +370,7 @@ if __name__ == '__main__':
     else:
         lsb_version = ''
 
-    print '''LSB Version:    %s
+    print('''LSB Version:    %s
 Distributor ID: %s
 Description:    %s
 Release:        %s
@@ -375,6 +378,6 @@ Codename:       %s''' % (lsb_version,
                          distinfo.get("ID"),
                          distinfo.get("DESCRIPTION"),
                          distinfo.get("RELEASE"),
-                         distinfo.get("CODENAME"))
+                         distinfo.get("CODENAME")))
 
 # vim: ts=4 sw=4 sts=4 et:

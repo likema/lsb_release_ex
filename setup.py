@@ -20,7 +20,7 @@ setup(
     classifiers=[
         "Topic :: Software Development :: Libraries :: Python Modules",
         "Programming Language :: Python",
-        "Operating System :: Linux",
+        "Operating System :: POSIX :: Linux",
         "Intended Audience :: Developers",
-        "License :: GPL v2"])
+        "License :: OSI Approved :: GNU General Public License v2 (GPLv2)"])
 # vim: ts=4 sw=4 et:

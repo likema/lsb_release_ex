@@ -7,7 +7,11 @@ Red Hat series. It is inspired by Debian implementaion in lsb-release.
 
 ## Installation
 
-Download the latest version from github:
+Install by pip:
+
+	pip install lsb_release_ex
+
+or download the latest version from github:
 
 	git clone git://github.com/likema/lsb_release_ex.git
 	cd lsb_release_ex
